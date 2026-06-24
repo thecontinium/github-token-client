@@ -1,0 +1,18 @@
+#!/bin/bash
+# Fetch the temporary short-lived token over local address loopback (SSH Tunnel mapping)
+REMOTE_TOKEN=$(curl -s --max-time 3 http://127.0.0.1:8080)
+
+if [ -z "$REMOTE_TOKEN" ]; then
+    echo "❌ Error: Remote secure token gateway is unreachable." >&2
+    exit 1
+fi
+
+# Override config scope into a stateless RAM container
+export GH_CONFIG_DIR="/tmp/gh_sandbox_$(date +%s)"
+mkdir -p "$GH_CONFIG_DIR"
+
+export GH_TOKEN="$REMOTE_TOKEN"
+export GITHUB_TOKEN="$REMOTE_TOKEN"
+
+# Exec the real, underlying gh binary passing original parameters straight through
+exec /opt/homebrew/bin/gh "$@"
