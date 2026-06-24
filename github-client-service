@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# 1. Fetch the temporary short-lived token over local loopback (SSH Tunnel mapping)
+REMOTE_TOKEN=$(curl -s --max-time 3 http://127.0.0.1:8080)
+
+if [ -z "$REMOTE_TOKEN" ]; then
+    echo "❌ Error: Remote secure token gateway on port 8080 is unreachable." >&2
+    exit 1
+fi
+
+# 2. Override config scope into a stateless RAM container
+export GH_CONFIG_DIR="/tmp/gh_sandbox_$(date +%s)"
+mkdir -p "$GH_CONFIG_DIR"
+
+export GH_TOKEN="$REMOTE_TOKEN"
+export GITHUB_TOKEN="$REMOTE_TOKEN"
+
+# 3. Dynamically locate the real underlying gh binary (Intel or Apple Silicon)
+if [ -x "/opt/homebrew/bin/gh" ]; then
+    REAL_GH="/opt/homebrew/bin/gh"
+elif [ -x "/usr/local/bin/gh" ]; then
+    REAL_GH="/usr/local/bin/gh"
+else
+    # Strip out .local/bin from PATH to find the global binary and avoid infinite execution loops
+    REAL_GH=$(PATH=$(echo "$PATH" | sed -E "s|([^:]*/\.local/bin:?)||g") command -v gh || true)
+fi
+
+if [ -z "$REAL_GH" ] || [ ! -x "$REAL_GH" ]; then
+    echo "❌ Error: Real system 'gh' binary not found." >&2
+    exit 1
+fi
+
+# 4. Exec the real, underlying gh binary passing original parameters straight through
+exec "$REAL_GH" "$@"
